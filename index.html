@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Super Chaotic Colorful — Clown Center</title>
+  <style>
+    /* reset */
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body,#app{height:100%}
+    body{
+      font-family:system-ui,Segoe UI,Roboto, Helvetica, Arial, sans-serif;
+      overflow:hidden;
+      background: radial-gradient(circle at 20% 20%, rgba(255,200,0,0.12), transparent 15%),
+                  radial-gradient(circle at 80% 80%, rgba(0,200,255,0.08), transparent 18%),
+                  linear-gradient(135deg,#0f0c29 0%, #302b63 50%, #24243e 100%);
+    }
+
+    /* noisy grain */
+    .grain{position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(transparent 50%,rgba(0,0,0,0.02) 50%);opacity:.07;mix-blend-mode:overlay}
+
+    /* chaotic floating shapes */
+    .shape{
+      position:absolute;
+      width:var(--s,60px);
+      height:var(--s,60px);
+      left:var(--x,50%);
+      top:var(--y,50%);
+      border-radius:var(--r,12%);
+      transform:translate(-50%,-50%) rotate(var(--rot,0deg));
+      filter:blur(var(--blur,0px));
+      mix-blend-mode:screen;
+      opacity:.95;
+      animation: float var(--t,8s) linear infinite;
+      pointer-events:none;
+    }
+    @keyframes float{
+      0%{transform:translate(-50%,-50%) translateY(0) rotate(0);} 
+      50%{transform:translate(-50%,-50%) translateY(-30px) rotate(180deg);} 
+      100%{transform:translate(-50%,-50%) translateY(0) rotate(360deg);} 
+    }
+
+    /* center stage */
+    .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20}
+    .clown-wrap{
+      display:grid;place-items:center;
+      width: clamped(180px,25vmin,340px);
+      height: clamped(180px,25vmin,340px);
+      backdrop-filter: blur(6px) saturate(120%);
+      border-radius: 50%;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6), inset 0 0 40px rgba(255,255,255,0.02);
+      cursor:grab;
+      transition: transform .18s ease-out, box-shadow .18s;
+      user-select:none;
+    }
+    .clown{
+      font-size: clamp(48px,12vmin,140px);
+      transform-origin:center center;
+      transition: transform .12s cubic-bezier(.2,.9,.3,1);
+      will-change:transform;
+      text-shadow: 0 2px 0 rgba(0,0,0,.2), 0 10px 30px rgba(0,0,0,.45);
+    }
+
+    .pulse { animation: pulse 1.8s ease-in-out infinite; }
+    @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.06)}100%{transform:scale(1)}}
+
+    /* controls */
+    .ui {
+      position:fixed;right:12px;top:12px;z-index:40;display:flex;flex-direction:column;gap:8px
+    }
+    .btn{background:linear-gradient(90deg,rgba(255,255,255,0.12),rgba(255,255,255,0.06));padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,0.08);backdrop-filter:blur(4px);color:white;cursor:pointer;font-weight:600}
+    .hint{position:fixed;left:12px;bottom:12px;color:rgba(255,255,255,0.75);font-size:13px;z-index:40}
+
+    /* confetti pieces */
+    .confetti {position:fixed;pointer-events:none;z-index:30}
+
+    /* interactive cursor trail */
+    .trail {position:fixed;border-radius:50%;pointer-events:none;mix-blend-mode:screen;opacity:.85}
+
+    /* small responsive tweaks */
+    @media (max-width:600px){
+      .ui{top:auto;bottom:12px}
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="grain"></div>
+
+    <!-- chaotic shapes container -->
+    <div id="shapes" aria-hidden="true"></div>
+
+    <!-- center clown -->
+    <div class="stage">
+      <div class="clown-wrap" id="clownWrap" title="Drag me, click me, press keys">
+        <div class="clown pulse" id="clown" role="img" aria-label="clown emoji">🤡</div>
+      </div>
+    </div>
+
+    <!-- UI -->
+    <div class="ui">
+      <button class="btn" id="explodeBtn">Explode!</button>
+      <button class="btn" id="shuffleBtn">Shuffle Colors</button>
+      <button class="btn" id="toggleMotionBtn">Toggle Motion</button>
+    </div>
+
+    <div class="hint">Click the clown to pop confetti • Drag to fling • Press R to randomize</div>
+  </div>
+
+  <script>
+    /* UTILITIES */
+    const rand = (a,b=0)=> Math.random()*(a-b)+b;
+    const pick = arr=> arr[Math.floor(Math.random()*arr.length)];
+
+    /* create chaotic shapes */
+    const shapesEl = document.getElementById('shapes');
+    const paletteSets = [
+      ['#ff3cac','#784ba0','#2b86c5','#ffd54d'],
+      ['#00bfb3','#f46b45','#ffd166','#7f00ff'],
+      ['#ff6b6b','#f0e130','#00c2ff','#9b59b6'],
+      ['#ff9a9e','#fecfef','#f6d365','#a1c4fd']
+    ];
+    let palette = pick(paletteSets);
+
+    function makeShape(){
+      const el = document.createElement('div');
+      el.className='shape';
+      const size = rand(120,30);
+      el.style.setProperty('--s', size+'px');
+      el.style.setProperty('--x', rand(window.innerWidth)+'px');
+      el.style.setProperty('--y', rand(window.innerHeight)+'px');
+      el.style.setProperty('--rot', rand(360)+'deg');
+      el.style.setProperty('--r', Math.random()>0.6? '50%':'12%');
+      el.style.setProperty('--blur', (Math.random()>0.6? rand(18,2)+'px':'0px'));
+      el.style.setProperty('--t', rand(14,6)+'s');
+      const g = Math.floor(rand(6));
+      const color = palette[Math.floor(Math.random()*palette.length)];
+      const grad = `radial-gradient(circle at ${rand(100)}% ${rand(100)}%, ${color}, transparent 40%)`;
+      el.style.backgroundImage = grad;
+      shapesEl.appendChild(el);
+      // remove occasionally
+      setTimeout(()=>{ el.remove() }, rand(25000,10000));
+    }
+
+    // seed a bunch
+    for(let i=0;i<20;i++) makeShape();
+    // keep adding
+    let motionEnabled = true;
+    setInterval(()=>{ if(motionEnabled) makeShape() }, 900);
+
+    /* clown interactions */
+    const clown = document.getElementById('clown');
+    const wrap = document.getElementById('clownWrap');
+
+    // pointer parallax
+    document.addEventListener('mousemove', e=>{
+      const cx = window.innerWidth/2;
+      const cy = window.innerHeight/2;
+      const dx = (e.clientX-cx)/cx;
+      const dy = (e.clientY-cy)/cy;
+      wrap.style.transform = `translate3d(${dx*12}px,${dy*12}px,0) rotate(${dx*10}deg)`;
+      // little tilt of emoji
+      clown.style.transform = `rotate(${dx*8}deg) scale(${1+Math.abs(dy)*0.06})`;
+      spawnTrail(e.clientX,e.clientY);
+    });
+
+    // drag to fling
+    let dragging=false, lastPos=null, vel={x:0,y:0};
+    wrap.addEventListener('pointerdown', e=>{
+      dragging=true; wrap.setPointerCapture(e.pointerId); wrap.style.cursor='grabbing';
+      lastPos = {x:e.clientX,y:e.clientY,t:Date.now()};
+    });
+    window.addEventListener('pointerup', e=>{
+      if(dragging){
+        dragging=false; wrap.style.cursor='grab';
+        // measure velocity
+        const now = Date.now(); const dt = (now-lastPos.t)/1000 || 0.016;
+        const vx = (e.clientX-lastPos.x)/dt; const vy = (e.clientY-lastPos.y)/dt;
+        fling(vx,vy);
+      }
+    });
+    window.addEventListener('pointermove', e=>{
+      if(!dragging) return;
+      wrap.style.left = e.clientX+'px'; wrap.style.top = e.clientY+'px';
+      lastPos = {x:e.clientX,y:e.clientY,t:Date.now()};
+    });
+
+    // fling animation
+    function fling(vx,vy){
+      const el = wrap;
+      let x = el.offsetLeft || (window.innerWidth/2 - el.offsetWidth/2);
+      let y = el.offsetTop || (window.innerHeight/2 - el.offsetHeight/2);
+      let t0 = null;
+      function step(ts){
+        if(!t0) t0=ts;
+        const dt = (ts-t0)/1000; t0=ts;
+        // simple friction
+        vx *= 0.96; vy *= 0.96;
+        x += vx*dt*0.02; y += vy*dt*0.02;
+        el.style.left = x + 'px'; el.style.top = y + 'px';
+        // collide with edges => bounce + spawn shapes
+        if(x<0 || x>window.innerWidth) { vx *= -0.9; makeShape(); }
+        if(y<0 || y>window.innerHeight) { vy *= -0.9; makeShape(); }
+        if(Math.abs(vx)+Math.abs(vy) > 0.5) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    // click to pop confetti
+    function popConfetti(x=window.innerWidth/2,y=window.innerHeight/2){
+      const colors = palette.concat(['#fff','#000']).slice(0,10);
+      for(let i=0;i<50;i++){
+        const el = document.createElement('div');
+        el.className='confetti';
+        const size = Math.round(rand(14,6));
+        el.style.width = size+'px'; el.style.height = (Math.round(rand(20,6))+'px');
+        el.style.left = x + 'px'; el.style.top = y + 'px';
+        el.style.background = pick(colors);
+        el.style.position='fixed';
+        el.style.transformOrigin='center';
+        document.body.appendChild(el);
+        // physics
+        const angle = rand(Math.PI*2);
+        const speed = rand(600,80);
+        const vx = Math.cos(angle)*speed; const vy = Math.sin(angle)*speed - 200;
+        const rot = rand(720, -720);
+        const life = rand(1800,900);
+        const start = performance.now();
+        function frame(now){
+          const t = now-start; const dt = t/1000;
+          const nx = x + vx*dt*0.001*(1+Math.random()*0.4);
+          const ny = y + vy*dt*0.001 + (200*dt*dt);
+          el.style.left = nx + 'px'; el.style.top = ny + 'px';
+          el.style.transform = `rotate(${rot*dt}deg)`;
+          el.style.opacity = String(1 - t/life);
+          if(t<life) requestAnimationFrame(frame); else el.remove();
+        }
+        requestAnimationFrame(frame);
+      }
+    }
+
+    clown.addEventListener('click', e=>{ popConfetti(e.clientX,e.clientY); pulseNow(); });
+    document.getElementById('explodeBtn').addEventListener('click', ()=> popConfetti(window.innerWidth/2, window.innerHeight/2));
+
+    function pulseNow(){
+      clown.classList.remove('pulse'); void clown.offsetWidth; clown.classList.add('pulse');
+    }
+
+    // spawn tiny trail blobs
+    function spawnTrail(x,y){
+      const el = document.createElement('div'); el.className='trail';
+      const s = rand(28,6); el.style.width=s+'px'; el.style.height=s+'px';
+      el.style.left = x+'px'; el.style.top = y+'px';
+      el.style.backgroundImage = `radial-gradient(circle at 30% 30%, ${pick(palette)}, transparent 60%)`;
+      el.style.opacity = .8; el.style.zIndex=25;
+      document.body.appendChild(el);
+      let t0 = performance.now();
+      function f(now){
+        const t = now-t0; const p = t/600; el.style.transform = `translateY(${ -40*p }px) scale(${1-0.4*p}) rotate(${p*180}deg)`;
+        el.style.opacity = String(1-p);
+        if(p<1) requestAnimationFrame(f); else el.remove();
+      }
+      requestAnimationFrame(f);
+    }
+
+    // keyboard controls
+    window.addEventListener('keydown', e=>{
+      if(e.key.toLowerCase()==='r') randomizePalette();
+      if(e.key.toLowerCase()==='m') { motionEnabled = !motionEnabled; }
+      if(e.key===' ') { popConfetti(window.innerWidth/2,window.innerHeight/2); }
+    });
+
+    document.getElementById('shuffleBtn').addEventListener('click', randomizePalette);
+    document.getElementById('toggleMotionBtn').addEventListener('click', ()=>{ motionEnabled=!motionEnabled; document.getElementById('toggleMotionBtn').textContent = motionEnabled? 'Toggle Motion' : 'Motion Off'; });
+
+    function randomizePalette(){
+      palette = pick(paletteSets);
+      // recolor existing shapes quickly by toggling their gradient
+      document.querySelectorAll('.shape').forEach(el=>{
+        const c = pick(palette);
+        el.style.backgroundImage = `radial-gradient(circle at ${rand(100)}% ${rand(100)}%, ${c}, transparent 40%)`;
+      });
+      // small pop
+      popConfetti(window.innerWidth/2,window.innerHeight/2);
+    }
+
+    // resize handling
+    window.addEventListener('resize', ()=>{ /* nothing major, shapes reposition naturally */ });
+
+    // initial gentle wiggle
+    setInterval(()=>{ clown.style.transform += ' rotate(1deg)'; }, 4000);
+
+    // accessibility: allow Enter to pop confetti when clown focused
+    clown.tabIndex=0;
+    clown.addEventListener('keydown', e=>{ if(e.key==='Enter') popConfetti(window.innerWidth/2, window.innerHeight/2); });
+
+    // tiny initial burst
+    setTimeout(()=> popConfetti(window.innerWidth/2,window.innerHeight/2), 900);
+  </script>
+</body>
+</html>
